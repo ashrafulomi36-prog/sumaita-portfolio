@@ -10,15 +10,27 @@ const client = createClient({
   useCdn: true
 })
 
+// ---------- safe runner — keeps static HTML if Sanity fails ----------
+async function safeRender(fn, label) {
+  try {
+    await fn()
+  } catch (err) {
+    console.warn(`[sanity] ${label} failed — static fallback kept`, err)
+  }
+}
+
 // ---------- Hero + About (index.html) ----------
 async function renderHero() {
   const el = document.querySelector('[data-sanity="hero"]')
   if (!el) return
   const hero = await client.fetch(`*[_type == "hero"][0]{name, role, lead}`)
   if (!hero) return
-  el.querySelector('.js-name').textContent = hero.name
-  el.querySelector('.js-role').textContent = hero.role
-  el.querySelector('.js-lead').textContent = hero.lead
+  const name = el.querySelector('.js-name')
+  const role = el.querySelector('.js-role')
+  const lead = el.querySelector('.js-lead')
+  if (hero.name && name) name.textContent = hero.name
+  if (hero.role && role) role.textContent = hero.role
+  if (hero.lead && lead) lead.textContent = hero.lead
 }
 
 async function renderAbout() {
@@ -26,8 +38,10 @@ async function renderAbout() {
   if (!el) return
   const about = await client.fetch(`*[_type == "about"][0]{heading, body}`)
   if (!about) return
-  el.querySelector('.js-heading').textContent = about.heading
-  el.querySelector('.js-body').textContent = about.body
+  const heading = el.querySelector('.js-heading')
+  const body = el.querySelector('.js-body')
+  if (about.heading && heading) heading.textContent = about.heading
+  if (about.body && body) body.textContent = about.body
 }
 
 // ---------- Skills ----------
@@ -35,7 +49,7 @@ async function renderSkills() {
   const el = document.querySelector('[data-sanity="skills"]')
   if (!el) return
   const skills = await client.fetch(`*[_type == "skills"][0]{items}`)
-  if (!skills?.items) return
+  if (!skills?.items?.length) return
   el.innerHTML = skills.items.map(s => `<span class="skill-chip">${s}</span>`).join('')
 }
 
@@ -46,6 +60,7 @@ async function renderProjects() {
   const projects = await client.fetch(
     `*[_type == "project"] | order(date desc){title, summary, tech, date, "cover": cover.asset->url, githubUrl, liveUrl}`
   )
+  if (!projects?.length) return
   el.innerHTML = projects.map(p => `
     <div class="card"><div class="card-inner"
       data-title="${p.title}"
@@ -66,6 +81,7 @@ async function renderEducation() {
   const el = document.querySelector('[data-sanity="education"]')
   if (!el) return
   const items = await client.fetch(`*[_type == "education"] | order(years desc){institution, degree, years, gpa}`)
+  if (!items?.length) return
   el.innerHTML = items.map(e => `
     <div class="list-item">
       <div><strong>${e.institution}</strong><div class="meta">${e.degree}${e.gpa ? ' · GPA ' + e.gpa : ''}</div></div>
@@ -79,6 +95,7 @@ async function renderCertificates() {
   const el = document.querySelector('[data-sanity="certificates"]')
   if (!el) return
   const items = await client.fetch(`*[_type == "certificate"] | order(date desc){title, issuer, refId, date}`)
+  if (!items?.length) return
   el.innerHTML = items.map(c => `
     <div class="list-item">
       <div><strong>${c.title}</strong><div class="meta">${c.issuer}${c.refId ? ' · ' + c.refId : ''}</div></div>
@@ -92,6 +109,7 @@ async function renderReferences() {
   const el = document.querySelector('[data-sanity="references"]')
   if (!el) return
   const items = await client.fetch(`*[_type == "reference"]{name, email, phone}`)
+  if (!items?.length) return
   el.innerHTML = items.map(r => `
     <div class="list-item">
       <div><strong>${r.name}</strong><div class="meta">${[r.email, r.phone].filter(Boolean).join(' · ')}</div></div>
@@ -105,11 +123,18 @@ async function renderContact() {
   if (!el) return
   const c = await client.fetch(`*[_type == "contact"][0]{phone, email, location}`)
   if (!c) return
-  el.querySelector('.js-email').textContent = c.email
-  el.querySelector('.js-email').href = `mailto:${c.email}`
-  el.querySelector('.js-phone').textContent = c.phone
-  el.querySelector('.js-phone').href = `tel:${c.phone.replace(/[^+\d]/g, '')}`
-  el.querySelector('.js-location').textContent = c.location
+  const email = el.querySelector('.js-email')
+  const phone = el.querySelector('.js-phone')
+  const location = el.querySelector('.js-location')
+  if (c.email && email) {
+    email.textContent = c.email
+    email.href = `mailto:${c.email}`
+  }
+  if (c.phone && phone) {
+    phone.textContent = c.phone
+    phone.href = `tel:${c.phone.replace(/[^+\d]/g, '')}`
+  }
+  if (c.location && location) location.textContent = c.location
 }
 
 // ---------- Resume PDF download link ----------
@@ -151,13 +176,13 @@ function attachCardHandlers() {
   })
 }
 
-// run whatever applies to the current page
-renderHero()
-renderAbout()
-renderSkills()
-renderProjects()
-renderEducation()
-renderCertificates()
-renderReferences()
-renderContact()
-renderResumeLink()
+// run whatever applies to the current page (failures keep static HTML)
+safeRender(renderHero, 'hero')
+safeRender(renderAbout, 'about')
+safeRender(renderSkills, 'skills')
+safeRender(renderProjects, 'projects')
+safeRender(renderEducation, 'education')
+safeRender(renderCertificates, 'certificates')
+safeRender(renderReferences, 'references')
+safeRender(renderContact, 'contact')
+safeRender(renderResumeLink, 'resume link')
